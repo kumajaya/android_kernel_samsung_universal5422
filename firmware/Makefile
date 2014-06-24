@@ -141,7 +141,7 @@ fw-shipped-$(CONFIG_KEYBOARD_CYPRESS_TOUCH_20075) += cypress/cypress_20075_k_m06
 fw-shipped-$(CONFIG_SENSORS_SSP_STM) += ssp_stm.fw
 fw-shipped-$(CONFIG_SENSORS_SSP_ATMEL) += ssp_at.fw
 
-TSPFIRMWARE_DIRECTORY = firmware/tsp_synaptics
+TSPFIRMWARE_DIRECTORY = $(srctree)/firmware/tsp_synaptics
 ifeq ($(shell test -d $(TSPFIRMWARE_DIRECTORY) && echo yes),yes)
 fw-shipped-$(CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_DSX) += \
 						tsp_synaptics/synaptics_s5100_a2_k.fw	\
