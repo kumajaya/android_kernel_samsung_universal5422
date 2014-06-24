@@ -1387,7 +1387,13 @@ static void samsung_pinctrl_set_pdn_previos_state(
 			continue;
 
 		/* set previous state */
-		writel(0xffffffff, reg + offs[PINCFG_TYPE_CON_PDN]);
+#ifdef CONFIG_SOC_EXYNOS5422
+		if (!strncmp(bank->name, "gpa0", 4))
+			writel(0xffffff7f, reg + offs[PINCFG_TYPE_CON_PDN]);
+		else
+#endif
+			writel(0xffffffff, reg + offs[PINCFG_TYPE_CON_PDN]);
+
 		writel(bank->pm_save[PINCFG_TYPE_PUD],
 				reg + offs[PINCFG_TYPE_PUD_PDN]);
 	}

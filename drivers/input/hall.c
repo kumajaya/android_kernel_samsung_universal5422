@@ -41,7 +41,7 @@ struct hall_drvdata {
 #endif
 };
 
-static bool flip_cover;
+static bool flip_cover = 1;
 
 /* WorkAround for K3G Hall IRQ Problem */
 #ifdef CONFIG_SENSORS_HALL_IRQ_CTRL
@@ -197,12 +197,10 @@ static void flip_cover_work(struct work_struct *work)
 		}
 	}
 #endif
-	if(flip_cover != first) {
-		flip_cover = first;
-		input_report_switch(ddata->input,
-			SW_FLIP, flip_cover);
-		input_sync(ddata->input);
-	}
+	flip_cover = first;
+	input_report_switch(ddata->input,
+		SW_FLIP, flip_cover);
+	input_sync(ddata->input);
 }
 #endif
 
@@ -259,6 +257,8 @@ static void init_hall_ic_irq(struct input_dev *input)
 
 	int ret = 0;
 	int irq = ddata->irq_flip_cover;
+
+	flip_cover = gpio_get_value(ddata->gpio_flip_cover);
 
 	INIT_DELAYED_WORK(&ddata->flip_cover_dwork, flip_cover_work);
 
