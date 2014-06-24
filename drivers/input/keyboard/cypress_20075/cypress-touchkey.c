@@ -381,13 +381,22 @@ void touchkey_flip_cover(int value)
 		data[2] = TK_BIT_WRITE_CONFIRM;
     }
 
-    i2c_touchkey_write(tkey_i2c->client, data, 4);
+	ret = i2c_touchkey_write(tkey_i2c->client, data, 4);
+	if (ret < 0) {
+		dev_err(&tkey_i2c->client->dev, "i2c write failed\n");
+		return;
+	}
 
 	while (retry < 3) {
 		msleep(20);
 
 		/* Check status */
         ret = i2c_touchkey_read(tkey_i2c->client, TK_STATUS_FLAG, data, 1);
+		if (ret < 0) {
+			dev_err(&tkey_i2c->client->dev, "i2c read failed\n");
+			return;
+		}
+
 		flip_status = !!(data[0] & TK_BIT_FLIP);
 
 		dev_dbg(&tkey_i2c->client->dev,
@@ -1162,14 +1171,14 @@ static int touchkey_stop(struct touchkey_i2c *tkey_i2c)
 	cancel_delayed_work(&tkey_i2c->glove_change_work);
 #endif
 
+	tkey_i2c->enabled = false;
+	tkey_i2c->status_update = false;
+
 	/* disable ldo18 */
 	tkey_i2c->pdata->led_power_on(0);
 
 	/* disable ldo11 */
 	tkey_i2c->pdata->power_on(tkey_i2c, 0);
-
-	tkey_i2c->enabled = false;
-	tkey_i2c->status_update = false;
 
  err_stop_out:
 	mutex_unlock(&tkey_i2c->lock);

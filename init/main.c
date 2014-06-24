@@ -892,6 +892,14 @@ static int __ref kernel_init(void *unused)
 	      "See Linux Documentation/init.txt for guidance.");
 }
 
+#ifdef CONFIG_TIMA_RKP_30
+#define PGT_BIT_ARRAY_LEN 0x40000  /* 2GB memory needs */
+
+unsigned long pgt_bit_array[PGT_BIT_ARRAY_LEN];
+
+EXPORT_SYMBOL(pgt_bit_array);
+#endif
+
 static noinline void __init kernel_init_freeable(void)
 {
 	/*
@@ -919,9 +927,13 @@ static noinline void __init kernel_init_freeable(void)
 	lockup_detector_init();
 
 #ifdef CONFIG_TIMA_RKP	
+#ifdef CONFIG_TIMA_RKP_30 
+	tima_send_cmd5((unsigned long)_stext, (unsigned long)init_mm.pgd, (unsigned long)__init_begin, (unsigned long)__init_end,(unsigned long)__pa(pgt_bit_array), 0xc);
+#else
 	tima_send_cmd4((unsigned long)_stext, (unsigned long)init_mm.pgd, (unsigned long)__init_begin, (unsigned long)__init_end, 0xc);
-	printk("RKP _stext, pgd, _init_begin, _init_end %x, %x, %x, %x", (unsigned int)_stext, (unsigned int)init_mm.pgd, (unsigned int)__init_begin, (unsigned int)__init_end);
-#endif 
+#endif
+#endif
+ 
 	smp_init();
 	sched_init_smp();
 

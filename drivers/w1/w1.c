@@ -451,17 +451,26 @@ static int w1_atoreg_num(struct device *dev, const char *buf, size_t count,
 /* Searches the slaves in the w1_master and returns a pointer or NULL.
  * Note: must hold the mutex
  */
+static bool is_attached = false;
 static struct w1_slave *w1_slave_search_device(struct w1_master *dev,
 	struct w1_reg_num *rn)
 {
 	struct w1_slave *sl;
 	list_for_each_entry(sl, &dev->slist, w1_slave_entry) {
+#if 0	/* Using is_attached variable */
+		if (is_attached) {
+			pr_info("%s : but something is in slave list %s %p\n", __func__, sl->name, sl);
+			return sl;
+		}
+#else
 		if (sl->reg_num.family == rn->family &&
 				sl->reg_num.id == rn->id &&
 				sl->reg_num.crc == rn->crc) {
 			return sl;
 		}
+#endif
 	}
+
 	return NULL;
 }
 
@@ -897,6 +906,9 @@ static int w1_attach_slave_device(struct w1_master *dev, struct w1_reg_num *rn)
 	msg.type = W1_SLAVE_ADD;
 	w1_netlink_send(dev, &msg);
 
+	pr_info("%s : Set is_attached variable\n", __func__);
+	is_attached = true;
+
 	return 0;
 }
 
@@ -1021,9 +1033,15 @@ void w1_slave_found(struct w1_master *dev, u64 rn)
 	sl = w1_slave_search_device(dev, tmp);
 	if (sl) {
 		set_bit(W1_SLAVE_ACTIVE, (long *)&sl->flags);
-//		printk(KERN_ERR "%s : family id=0x%x\n", __func__, sl->reg_num.family);
+		printk(KERN_ERR "%s : fid(%x) id(%llx) crc(%x)\n", __func__,
+			(unsigned int) tmp->family,
+			(unsigned long long) tmp->id,
+			(unsigned int) tmp->crc);
 	} else {
-		printk(KERN_ERR "%s : no slave before, id=0x%x\n", __func__, tmp->family);
+		printk(KERN_ERR "[ELSE] %s : fid(%x) id(%llx) crc(%x)\n", __func__,
+			(unsigned int) tmp->family,
+			(unsigned long long) tmp->id,
+			(unsigned int) tmp->crc);
 
 		if (rn && tmp->crc == w1_calc_crc8((u8 *)&rn_le, 7))
 			w1_attach_slave_device(dev, tmp);
@@ -1073,9 +1091,13 @@ void w1_search(struct w1_master *dev, u8 search_type, w1_slave_found_callback cb
 		 */
 		mutex_lock(&dev->bus_mutex);
 		if (w1_reset_bus(dev)) {
+		/* No response from W1 */
+			is_attached = false;
 			mutex_unlock(&dev->bus_mutex);
 			dev_dbg(&dev->dev, "No devices present on the wire.\n");
 			break;
+		} else {
+			pr_info("%s : 0 response is coming\n", __func__);
 		}
 
 		/* Do fast search on single slave bus */
@@ -1107,7 +1129,10 @@ void w1_search(struct w1_master *dev, u8 search_type, w1_slave_found_callback cb
 
 			/* quit if no device responded */
 			if ( (triplet_ret & 0x03) == 0x03 )
+			{
+				pr_info("%s: quit if no device responded\n", __func__);
 				break;
+			}
 
 			/* If both directions were valid, and we took the 0 path... */
 			if (triplet_ret == 0)
@@ -1121,6 +1146,7 @@ void w1_search(struct w1_master *dev, u8 search_type, w1_slave_found_callback cb
 			if (!dev->priv && kthread_should_stop()) {
 				mutex_unlock(&dev->bus_mutex);
 				dev_dbg(&dev->dev, "Abort w1_search\n");
+				pr_info("%s: Abort w1_search\n", __func__);
 				return;
 			}
 		}
@@ -1146,10 +1172,15 @@ void w1_search_process_cb(struct w1_master *dev, u8 search_type,
 	w1_search_devices(dev, search_type, cb);
 
 	list_for_each_entry_safe(sl, sln, &dev->slist, w1_slave_entry) {
-		if (!test_bit(W1_SLAVE_ACTIVE, (unsigned long *)&sl->flags) && !--sl->ttl)
+		if (!test_bit(W1_SLAVE_ACTIVE, (unsigned long *)&sl->flags) && !--sl->ttl) {
+			pr_info("%s: detach slave (active bit clear)\n", __func__);
 			w1_slave_detach(sl);
+		}
 		else if (test_bit(W1_SLAVE_ACTIVE, (unsigned long *)&sl->flags))
+		{
+			pr_info("%s: active bit set\n", __func__);
 			sl->ttl = dev->slave_ttl;
+		}
 	}
 
 	if (dev->search_count > 0)
@@ -1202,7 +1233,9 @@ void w1_work(struct work_struct *work)
 
 	if (dev->search_count) {
 		mutex_lock(&dev->mutex);
+		pr_info("%s : JINHO start\n", __func__);
 		w1_search_process(dev, W1_SEARCH);
+		pr_info("%s : JINHO end\n", __func__);
 		mutex_unlock(&dev->mutex);
 	}
 

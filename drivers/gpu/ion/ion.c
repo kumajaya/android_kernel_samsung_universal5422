@@ -1618,6 +1618,12 @@ void ion_device_sync(struct ion_device *dev, struct sg_table *sgt,
 	size_t sum = 0;
 	pte_t *ptep;
 
+#ifdef CONFIG_TIMA_RKP_LAZY_MMU
+	int do_lazy_mmu = 0; 
+	pgd_t  *pgd;
+#endif
+
+
 	if (!memzero && !sync)
 		return;
 
@@ -1630,6 +1636,20 @@ void ion_device_sync(struct ion_device *dev, struct sg_table *sgt,
 	ptep = dev->pte[pte_idx];
 	vaddr = (unsigned long) dev->reserved_vm_area->addr +
 				(SZ_1M * page_idx);
+
+#ifdef CONFIG_TIMA_RKP_LAZY_MMU
+	pgd = pgd_offset_k(vaddr);
+
+	if (tima_is_pg_protected((unsigned long)ptep) == 1){
+		do_lazy_mmu = 1;
+	}
+	if (do_lazy_mmu) {
+		spin_lock(&init_mm.page_table_lock);
+		tima_send_cmd2((unsigned int)pgd, TIMA_LAZY_MMU_START, TIMA_LAZY_MMU_CMDID);
+   		flush_tlb_l2_page((pmd_t *)pgd);
+		spin_unlock(&init_mm.page_table_lock);
+	}
+#endif
 
 	for_each_sg(sgt->sgl, sg, sgt->orig_nents, i) {
 		int j;
@@ -1670,6 +1690,15 @@ void ion_device_sync(struct ion_device *dev, struct sg_table *sgt,
 				(SZ_1M * page_idx),
 			dev->pte[pte_idx], sum, dir, sync, memzero);
 	}
+
+#ifdef CONFIG_TIMA_RKP_LAZY_MMU
+	if (do_lazy_mmu) {
+		spin_lock(&init_mm.page_table_lock);
+		tima_send_cmd2((unsigned int)pgd, TIMA_LAZY_MMU_STOP, TIMA_LAZY_MMU_CMDID);
+		flush_tlb_l2_page((pmd_t *)pgd);
+		spin_unlock(&init_mm.page_table_lock);
+	}
+#endif
 
 	atomic_push(&dev->page_idx, page_idx, VM_PAGE_COUNT_WIDTH);
 

@@ -53,7 +53,10 @@ pmd_t *top_pmd;
 #define CPOLICY_WRITETHROUGH	2
 #define CPOLICY_WRITEBACK	3
 #define CPOLICY_WRITEALLOC	4
-
+#ifdef CONFIG_STRICT_MEMORY_RWX
+#define RX_AREA_START           _text
+#define RX_AREA_END             __start_rodata
+#endif
 static unsigned int cachepolicy __initdata = CPOLICY_WRITEBACK;
 static unsigned int ecc_mask __initdata = 0;
 pgprot_t pgprot_user;
@@ -65,7 +68,9 @@ pgprot_t pgprot_s2_device;
 EXPORT_SYMBOL(pgprot_user);
 EXPORT_SYMBOL(pgprot_kernel);
 
+#ifndef CONFIG_STRICT_MEMORY_RWX
 static int enable_noexec;
+#endif
 
 struct cachepolicy {
 	const char	policy[16];
@@ -293,6 +298,20 @@ static struct mem_type mem_types[] = {
 		.prot_sect = PMD_TYPE_SECT | PMD_SECT_AP_WRITE,
 		.domain    = DOMAIN_KERNEL,
 	},
+#ifdef CONFIG_STRICT_MEMORY_RWX
+	[MT_MEMORY_R] = {
+		.prot_sect = PMD_TYPE_SECT | PMD_SECT_XN,
+		.domain    = DOMAIN_KERNEL,
+	},
+	[MT_MEMORY_RW] = {
+		.prot_sect = PMD_TYPE_SECT | PMD_SECT_AP_WRITE | PMD_SECT_XN,
+		.domain    = DOMAIN_KERNEL,
+	},
+	[MT_MEMORY_RX] = {
+		.prot_sect = PMD_TYPE_SECT,
+		.domain    = DOMAIN_KERNEL,
+	},
+#endif
 	[MT_ROM] = {
 		.prot_sect = PMD_TYPE_SECT,
 		.domain    = DOMAIN_KERNEL,
@@ -470,6 +489,10 @@ static void __init build_mem_type_table(void)
 		 * from SVC mode and no access from userspace.
 		 */
 		mem_types[MT_ROM].prot_sect |= PMD_SECT_APX|PMD_SECT_AP_WRITE;
+#ifdef CONFIG_STRICT_MEMORY_RWX
+		mem_types[MT_MEMORY_RX].prot_sect |= PMD_SECT_APX|PMD_SECT_AP_WRITE;
+		mem_types[MT_MEMORY_R].prot_sect |= PMD_SECT_APX|PMD_SECT_AP_WRITE;
+#endif
 		mem_types[MT_MINICLEAN].prot_sect |= PMD_SECT_APX|PMD_SECT_AP_WRITE;
 		mem_types[MT_CACHECLEAN].prot_sect |= PMD_SECT_APX|PMD_SECT_AP_WRITE;
 #endif
@@ -491,6 +514,11 @@ static void __init build_mem_type_table(void)
 			mem_types[MT_MEMORY].prot_pte |= L_PTE_SHARED;
 			mem_types[MT_MEMORY_DMA_READY].prot_pte |= L_PTE_SHARED;
 			mem_types[MT_MEMORY_NONCACHED].prot_sect |= PMD_SECT_S;
+#ifdef CONFIG_STRICT_MEMORY_RWX
+			mem_types[MT_MEMORY_R].prot_sect |= PMD_SECT_S;
+			mem_types[MT_MEMORY_RW].prot_sect |= PMD_SECT_S;
+			mem_types[MT_MEMORY_RX].prot_sect |= PMD_SECT_S;
+#endif
 			mem_types[MT_MEMORY_NONCACHED].prot_pte |= L_PTE_SHARED;
 		}
 	}
@@ -547,6 +575,11 @@ static void __init build_mem_type_table(void)
 	mem_types[MT_MEMORY].prot_pte |= kern_pgprot;
 	mem_types[MT_MEMORY_DMA_READY].prot_pte |= kern_pgprot;
 	mem_types[MT_MEMORY_NONCACHED].prot_sect |= ecc_mask;
+#ifdef CONFIG_STRICT_MEMORY_RWX
+	mem_types[MT_MEMORY_R].prot_sect |= ecc_mask | cp->pmd;
+	mem_types[MT_MEMORY_RW].prot_sect |= ecc_mask | cp->pmd;
+	mem_types[MT_MEMORY_RX].prot_sect |= ecc_mask | cp->pmd;
+#endif
 	mem_types[MT_ROM].prot_sect |= cp->pmd;
 
 	switch (cp->pmd) {
@@ -629,8 +662,10 @@ static void __init alloc_init_pte(pmd_t *pmd, unsigned long addr,
 	pte_t *pte = start_pte + pte_index(addr);
 
 	/* If replacing a section mapping, the whole section must be replaced */
+#ifndef CONFIG_STRICT_MEMORY_RWX
 	if (!enable_noexec)
 		BUG_ON(!pmd_none(*pmd) && pmd_bad(*pmd) && ((addr | end) & ~PMD_MASK));
+#endif
 
 	do {
 		set_pte_ext(pte, pfn_pte(pfn, __pgprot(type->prot_pte)), 0);
@@ -978,7 +1013,7 @@ void __init debug_ll_io_init(void)
 	create_mapping(&map, false);
 }
 #endif
-
+#ifndef CONFIG_STRICT_MEMORY_RWX
 void mark_data_noexec(void)
 {
 	unsigned long start;
@@ -1005,6 +1040,7 @@ void mark_data_noexec(void)
 			start, start + size);
 	set_memory_xn(start, size >> PAGE_SHIFT);
 }
+#endif
 
 static void * __initdata vmalloc_min =
 	(void *)(VMALLOC_END - (240 << 20) - VMALLOC_OFFSET);
@@ -1038,7 +1074,7 @@ static int __init early_vmalloc(char *arg)
 early_param("vmalloc", early_vmalloc);
 
 phys_addr_t arm_lowmem_limit __initdata = 0;
-
+#ifndef CONFIG_STRICT_MEMORY_RWX
 static int __init early_noexec(char *arg)
 {
 	if (!arg)
@@ -1052,7 +1088,7 @@ static int __init early_noexec(char *arg)
 	return 0;
 }
 early_param("noexec", early_noexec);
-
+#endif
 void __init sanity_check_meminfo(void)
 {
 	int i, j, highmem = 0;
@@ -1357,7 +1393,7 @@ static void __init kmap_init(void)
 		PKMAP_BASE, _PAGE_KERNEL_TABLE);
 #endif
 }
-
+#ifndef CONFIG_STRICT_MEMORY_RWX
 static inline void __init create_mapping_memory(phys_addr_t start, phys_addr_t end, bool force_pages)
 {
 	struct map_desc map;
@@ -1369,16 +1405,21 @@ static inline void __init create_mapping_memory(phys_addr_t start, phys_addr_t e
 	pr_info("%s: %s: %x ~ %x\n", __func__,
 			force_pages ? "page" : "section", start, end);
 }
+#else
+extern char __init_data[];
+#endif
 
 static void __init map_lowmem(void)
 {
 	struct memblock_region *reg;
 	phys_addr_t start;
 	phys_addr_t end;
-
+#ifndef CONFIG_STRICT_MEMORY_RWX
 	if (enable_noexec)
 		mem_types[MT_MEMORY].prot_sect |= PMD_SECT_XN;
-
+#else
+	struct map_desc map;
+#endif	
 	/* Map all the lowmem memory banks. */
 	for_each_memblock(memory, reg) {
 		start = reg->base;
@@ -1388,6 +1429,7 @@ static void __init map_lowmem(void)
 			end = arm_lowmem_limit;
 		if (start >= end)
 			break;
+#ifndef CONFIG_STRICT_MEMORY_RWX
 
 		create_mapping_memory(start, end, false);
 	}
@@ -1430,6 +1472,40 @@ static void __init map_lowmem(void)
 #endif
 
 }
+#else
+		map.pfn = __phys_to_pfn(start);
+		map.virtual = __phys_to_virt(start);
+		if (start <= __pa(_text) && __pa(_text) < end) {
+			map.length = SECTION_SIZE;
+			map.type = MT_MEMORY;
+			create_mapping(&map, false);
+			map.pfn = __phys_to_pfn(start + SECTION_SIZE);
+			map.virtual = __phys_to_virt(start + SECTION_SIZE);
+			map.length = (unsigned long)RX_AREA_END - map.virtual;
+			map.type = MT_MEMORY_RX;
+			create_mapping(&map, false);
+			map.pfn = __phys_to_pfn(__pa(__start_rodata));
+			map.virtual = (unsigned long)__start_rodata;
+			map.length = __init_begin - __start_rodata;
+			map.type = MT_MEMORY_R;
+			create_mapping(&map, false);
+			map.pfn = __phys_to_pfn(__pa(__init_begin));
+			map.virtual = (unsigned long)__init_begin;
+			map.length = __init_data - __init_begin;
+			map.type = MT_MEMORY;
+			create_mapping(&map, false);
+			map.pfn = __phys_to_pfn(__pa(__init_data));
+			map.virtual = (unsigned long)__init_data;
+			map.length = __phys_to_virt(end) - (unsigned int)__init_data;
+			map.type = MT_MEMORY_RW;
+		} else {
+			map.length = end - start;
+			map.type = MT_MEMORY_RW;
+		}
+	create_mapping(&map, false);
+	}
+}
+#endif
 
 /*
  * paging_init() sets up the page tables, initialises the zone memory

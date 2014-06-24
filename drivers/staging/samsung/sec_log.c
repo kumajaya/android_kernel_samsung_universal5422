@@ -592,17 +592,17 @@ late_initcall(sec_log_late_init);
 #define   TIMA_DEBUG_LOG_SIZE   1<<20
 
 #define   TIMA_SEC_LOG          0x4d800000
-#define   TIMA_SEC_LOG_SIZE     1<<20 
+#define   TIMA_SEC_LOG_SIZE     1<<18 
 
 #define   TIMA_PHYS_MAP         0x4d900000
 #define   TIMA_PHYS_MAP_SIZE    6<<20 
 
 #define   TIMA_SEC_TO_PGT       0x4e000000
-#define   TIMA_SEC_TO_PGT_SIZE  2<<20 
+#define   TIMA_SEC_TO_PGT_SIZE  1<<20 
 
 
 #define   TIMA_DASHBOARD_START  0x4d700000
-#define   TIMA_DASHBOARD_SIZE    0x4000
+#define   TIMA_DASHBOARD_SIZE    0x1000
 
 static int  tima_setup_rkp_mem(void){
 	if(reserve_bootmem(TIMA_DEBUG_LOG_START, TIMA_DEBUG_LOG_SIZE, BOOTMEM_EXCLUSIVE)){

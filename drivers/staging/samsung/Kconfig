@@ -15,6 +15,12 @@ config SEC_REBOOT
 	help
 	  Samsung TN reboot extension Feature. Do additional work when reboot.
 
+config SEC_MISC
+	bool "Samsung TM Misc Feature"
+	default n
+	help
+	  Samsung TN Misc extension Feature. Do additional work when Misc.
+
 config SEC_MEM
 	bool "Samsung TM memory information Feature"
 	default n
@@ -226,9 +232,9 @@ config SEC_DEBUG_TSP_LOG
 	  This option enables additional log buffer for tsp log.
 
 config SEC_DEBUG_TIMA_LOG
-	default n
+	default y
 	bool "Enable tima log support" if EMBEDDED
-	depends on SEC_DEBUG
+	depends on SEC_DEBUG && TIMA
 	help
 	  This option enables additional log buffer for tima log.
 

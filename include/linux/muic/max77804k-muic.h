@@ -132,6 +132,8 @@ typedef enum {
 	CHGTYP_SPECIAL_3_3V_CHARGER	= 0x06,
 	/* Reserved */
 	CHGTYP_RFU			= 0x07,
+	/* Any charger w/o USB */
+	CHGTYP_ANY_CHARGER		= 0xfc,
 	/* Any charger type */
 	CHGTYP_ANY			= 0xfd,
 	/* Don't care charger type */

@@ -247,8 +247,24 @@ static void exynos5422_set_abb(struct asv_info *asv_inform)
 	set_abb(target_reg, target_value);
 }
 
-static struct abb_common exynos5422_abb_common = {
-	        .set_target_abb = exynos5422_set_abb,
+static struct abb_common exynos5422_abb_arm = {
+	.set_target_abb = exynos5422_set_abb,
+};
+
+static struct abb_common exynos5422_abb_kfc = {
+	.set_target_abb = exynos5422_set_abb,
+};
+
+static struct abb_common exynos5422_abb_g3d = {
+	.set_target_abb = exynos5422_set_abb,
+};
+
+static struct abb_common exynos5422_abb_mif = {
+	.set_target_abb = exynos5422_set_abb,
+};
+
+static struct abb_common exynos5422_abb_int = {
+	.set_target_abb = exynos5422_set_abb,
 };
 
 static unsigned int exynos5422_get_asv_group_arm(struct asv_common *asv_comm)
@@ -860,7 +876,7 @@ struct asv_info exynos5422_asv_member[] = {
 		.asv_type	= ID_ARM,
 		.name		= "VDD_ARM",
 		.ops		= &exynos5422_asv_ops_arm,
-		.abb_info       = &exynos5422_abb_common,
+		.abb_info       = &exynos5422_abb_arm,
 		.asv_group_nr	= ASV_GRP_NR(ARM),
 		.dvfs_level_nr	= DVFS_LEVEL_NR(ARM),
 		.max_volt_value = MAX_VOLT(ARM),
@@ -868,7 +884,7 @@ struct asv_info exynos5422_asv_member[] = {
 		.asv_type	= ID_KFC,
 		.name		= "VDD_KFC",
 		.ops		= &exynos5422_asv_ops_kfc,
-		.abb_info       = &exynos5422_abb_common,
+		.abb_info       = &exynos5422_abb_kfc,
 		.asv_group_nr	= ASV_GRP_NR(KFC),
 		.dvfs_level_nr	= DVFS_LEVEL_NR(KFC),
 		.max_volt_value = MAX_VOLT(KFC),
@@ -876,7 +892,7 @@ struct asv_info exynos5422_asv_member[] = {
 		.asv_type	= ID_INT,
 		.name		= "VDD_INT",
 		.ops		= &exynos5422_asv_ops_int,
-		.abb_info       = &exynos5422_abb_common,
+		.abb_info       = &exynos5422_abb_int,
 		.asv_group_nr	= ASV_GRP_NR(INT),
 		.dvfs_level_nr	= DVFS_LEVEL_NR(INT),
 		.max_volt_value = MAX_VOLT(INT_V230),
@@ -884,7 +900,7 @@ struct asv_info exynos5422_asv_member[] = {
 		.asv_type	= ID_MIF,
 		.name		= "VDD_MIF",
 		.ops		= &exynos5422_asv_ops_mif,
-		.abb_info       = &exynos5422_abb_common,
+		.abb_info       = &exynos5422_abb_mif,
 		.asv_group_nr	= ASV_GRP_NR(MIF),
 		.dvfs_level_nr	= DVFS_LEVEL_NR(MIF),
 		.max_volt_value = MAX_VOLT(MIF),
@@ -892,7 +908,7 @@ struct asv_info exynos5422_asv_member[] = {
 		.asv_type	= ID_G3D,
 		.name		= "VDD_G3D",
 		.ops		= &exynos5422_asv_ops_g3d,
-		.abb_info       = &exynos5422_abb_common,
+		.abb_info       = &exynos5422_abb_g3d,
 		.asv_group_nr	= ASV_GRP_NR(G3D),
 		.dvfs_level_nr	= DVFS_LEVEL_NR(G3D),
 		.max_volt_value = MAX_VOLT(G3D),

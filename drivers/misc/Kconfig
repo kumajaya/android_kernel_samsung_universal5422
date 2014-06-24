@@ -524,6 +524,7 @@ config SRAM
 
 config TIMA_LOG
 	tristate "Support for dumping TIMA log"
+	depends on TIMA
 	default y
 	help
 	  This option enables support for dumping TIMA log.

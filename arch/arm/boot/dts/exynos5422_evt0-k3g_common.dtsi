@@ -54,6 +54,7 @@
 		enable-cache-control;
 		supports-poweroff-notification;
 		use-fine-tuning;
+		supports-ddr200-enhanced-strobe;
 		sw_data_timeout;
 		fifo-depth = <0x40>;
 		card-detect-delay = <200>;
@@ -130,6 +131,7 @@
 		enable-cclk-on-suspend;
 		sw_data_timeout;
 		use-fine-tuning;
+		ignore-phase = <(1 << 7)>;
 		fifo-depth = <0x40>;
 		card-detect-delay = <200>;
 		qos_int_level = <222000>;

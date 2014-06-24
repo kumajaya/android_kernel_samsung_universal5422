@@ -715,21 +715,33 @@ config MACH_S3G
 	help
 		BERLUTI 3G board
 
+config TIMA
+        bool "Enable TIMA(Trustzone based Integrity Measurement Archtecture feature"
+        default n
+
 config TIMA_RKP
 	bool "Enable RKP (Realtime Kernel Protection) TIMA feature"
+	depends on TIMA
 	default n
+
+config TIMA_RKP_30
+	bool "Enable RKP (Realtime Kernel Protection) TIMA 3.0 feature"
+	depends on TIMA_RKP
+	default y
+	help
+		TIMA RKP 30 features, including kernel fault fixup and optimized tima_pg_is_protected
 
 config TIMA_RKP_L1_TABLES
 	bool
 	depends on TIMA_RKP
-	default n
+	default y
 	help
 	  TIMA taking over management of L1 tables.
 
 config TIMA_RKP_L2_TABLES
 	bool
 	depends on TIMA_RKP
-	default n
+	default y
 	help
 	  TIMA taking over management L2 tables too.
 
@@ -743,21 +755,28 @@ config TIMA_RKP_L2_GROUP
 config TIMA_RKP_LAZY_MMU
 	bool
 	depends on TIMA_RKP_L2_TABLES
-	default	n 
+	default	y 
 	help
 	  TIMA lazy MMU for L2 pages
 
 config TIMA_IOMMU_OPT
 	bool
 	depends on TIMA_RKP_L2_TABLES
-	default	n 
+	default	y
 	help
 	  TIMA IOMMU optimization for L2 pages
+	
+config TIMA_KMAP_OPT
+	bool
+	depends on TIMA_RKP_L2_TABLES
+	default	y
+	help
+	  TIMA KMAP optimization for L2 pages
 
 config TIMA_DALVIKHEAP_OPT
 	bool
 	depends on TIMA_RKP_L2_TABLES
-	default	n 
+	default	y 
 	help
 	  TIMA DALVIK HEAP optimization for L2 pages
 

@@ -138,6 +138,16 @@ void ion_carveout_heap_unmap_kernel(struct ion_heap *heap,
 int ion_carveout_heap_map_user(struct ion_heap *heap, struct ion_buffer *buffer,
 			       struct vm_area_struct *vma)
 {
+
+#ifdef CONFIG_TIMA_IOMMU_OPT
+        if (buffer->size) {
+		/* iommu optimization- needs to be turned ON from
+		 * the tz side.
+		 */
+                cpu_v7_tima_iommu_opt(vma->vm_start, vma->vm_end, (unsigned long)vma->vm_mm->pgd);
+        }
+#endif /* CONFIG_TIMA_IOMMU_OPT */ 
+
 	return remap_pfn_range(vma, vma->vm_start,
 			       __phys_to_pfn(buffer->priv_phys) + vma->vm_pgoff,
 			       vma->vm_end - vma->vm_start,

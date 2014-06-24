@@ -159,23 +159,23 @@ ENTRY(cpu_v7_tima_set_pte_ext)
 	mov     r2, r0   //r2 is mcr_val 
 	/** Cache invalidate the values to be written
 	 */
-	mcr     p15, 0, r0, c7, c14, 1          @ flush_linux_pte
+//	mcr     p15, 0, r0, c7, c10, 1          @ flush_linux_pte
 	add     r0, r0, #2048
-	mcr     p15, 0, r0, c7, c14, 1          @ flush_arm_pte
-	dsb
-	isb
+//	mcr     p15, 0, r0, c7, c10, 1          @ flush_arm_pte
+//	dsb
+//	isb
 	ldr     r0, =0x83807000
 	smc     #2
 	pop	{r0}
 	/** Cache invalidate again to ensure no 
 	 *  values re-cached by speculative fetching
 	 */
-	mcr     p15, 0, r0, c7, c6,  1
-	dsb
-	isb
+//	mcr     p15, 0, r0, c7, c10,  1
+//	dsb/
+//	isb
+#ifdef CONFIG_TIMA_RKP_DEBUG
 	ldr     r2, [r0]
 	cmp     r1, r2
-#ifdef CONFIG_TIMA_RKP_DEBUG
 	beq	2f     
 	stmfd	sp!, {r0}
 	ldr		r0, =0x8380f000		@cmd_id=0x0f
@@ -184,12 +184,12 @@ ENTRY(cpu_v7_tima_set_pte_ext)
 2:
 #endif
 	add	r0, r0, #2048
-	mcr     p15, 0, r0, c7, c6,  1
-	dsb
-	isb
+//	mcr     p15, 0, r0, c7, c10,  1
+//	dsb
+//	isb
+#ifdef CONFIG_TIMA_RKP_DEBUG
 	ldr     r2, [r0]
 	cmp     r3, r2
-#ifdef CONFIG_TIMA_RKP_DEBUG
 	beq	3f
 	stmfd	sp!, {r0}
 	ldr	r0, =0x8380f000		@cmd_id=0x0f
@@ -203,6 +203,61 @@ ENTRY(cpu_v7_tima_set_pte_ext)
 	mov	pc, lr
 ENDPROC(cpu_v7_tima_set_pte_ext)
 #endif
+
+#ifdef CONFIG_TIMA_RKP
+	.global cpu_v7_set_pte_ext_proc_end
+#endif
+
+#if 0
+reset_ccnt:
+       /* Resets the CCNT    */
+       mrc     p15, 0, r0, c9, c12, 0  /* Read PMNC  */
+       orr     r0, r0, #0x05           /* Set C bit (Event Counter Reset)    */
+       mcr     p15, 0, r0, c9, c12, 0  /* Write PMNC */
+       bx      lr
+
+       /* void enable_ccnt(void) */
+enable_ccnt:   
+       /* Enable the CCNT    */
+       mov     r0, #0x80000000         /* Set C bit  */
+       mcr     p15, 0, r0, c9, c12, 1  /* Write CNTENS Register      */
+       bx      lr
+
+
+/* Disable the CCNT   */
+/* uint32_t disable_ccnt(void)    */
+disable_ccnt:
+       mov     r0, #0x80000000         /* Clear C bit        */
+       mcr     p15, 0, r0, c9, c12, 2  /* Write CNTENC Register      */
+       bx      lr
+
+/* uint32_t read_ccnt(void)    */
+read_ccnt:     
+       /* Returns the value of CCNT  */
+       mrc     p15, 0, r0, c9, c13, 0 /* Read CCNT Register  */
+       bx      lr
+
+       .global start_timer @ export this function for the linker
+start_timer:
+       stmfd   sp!, {r0-r12, lr}
+       bl      disable_ccnt
+       bl      reset_ccnt
+       bl      enable_ccnt
+       ldmfd   sp!, {r0-r12, lr}
+       bx      lr
+
+       .global stop_timer @ export this function for the linker
+stop_timer:
+       stmfd   sp!, {r0-r12, lr}
+       bl      disable_ccnt
+       bl      read_ccnt
+       bl      store_data
+       ldmfd   sp!, {r0-r12, lr}
+       bx      lr
+#endif
+
+
+		
 ENTRY(cpu_v7_set_pte_ext)
 #ifdef CONFIG_MMU
 	str	r1, [r0]			@ linux version
@@ -245,6 +300,9 @@ ENTRY(cpu_v7_set_pte_ext)
 	ALT_UP (mcr	p15, 0, r0, c7, c10, 1)		@ flush_pte
 #endif
 	mov	pc, lr
+#ifdef	CONFIG_TIMA_RKP
+cpu_v7_set_pte_ext_proc_end:
+#endif
 ENDPROC(cpu_v7_set_pte_ext)
 
 	/*

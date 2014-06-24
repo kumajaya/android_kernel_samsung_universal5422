@@ -217,7 +217,7 @@ static const struct max77804k_muic_vps_data muic_vps_table[] = {
 		.adc		= ADC_OPEN_219,
 		.vbvolt		= VB_HIGH,
 		.chgdetrun	= CHGDETRUN_FALSE,
-		.chgtyp		= CHGTYP_DEDICATED_CHARGER,
+		.chgtyp		= CHGTYP_ANY_CHARGER,
 		.control1	= CTRL1_OPEN,
 		.vps_name	= "TA",
 		.attached_dev	= ATTACHED_DEV_TA_MUIC,
@@ -1605,6 +1605,18 @@ static bool muic_check_vps_chgtyp
 	if (tmp_vps->chgtyp == chgtyp) {
 		ret = true;
 		goto out;
+	}
+
+	if (tmp_vps->chgtyp == CHGTYP_ANY_CHARGER) {
+		switch (chgtyp) {
+		case CHGTYP_DEDICATED_CHARGER:
+		case CHGTYP_500MA:
+		case CHGTYP_1A:
+			ret = true;
+			goto out;
+		default:
+			break;
+		}
 	}
 
 	if (tmp_vps->chgtyp == CHGTYP_ANY) {

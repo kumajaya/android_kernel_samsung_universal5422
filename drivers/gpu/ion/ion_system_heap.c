@@ -455,7 +455,7 @@ static int ion_system_heap_shrink(struct shrinker *shrinker,
 	nr_freelist = ion_heap_freelist_size(heap) / PAGE_SIZE;
 	nr_total += nr_freelist;
 
-	if (sc->nr_to_scan == 0)
+	if ((sc->nr_to_scan == 0) || !nr_total)
 		return nr_total;
 	/*
 	 * shrink shift: aging the rate of page returned by shrinker

@@ -147,31 +147,22 @@ static inline void tima_send_cmd4 (unsigned int p1, unsigned int p2, unsigned in
 		"smc     #1\n" 
         "ldmfd   sp!, {r0-r5}" : : "r" (p1), "r" (p2), "r" (p3), "r" (p4), "r" (tima_cmdid) : "r0","r2","r3","r4","r5","cc");
 }
-#endif 
-#if 0 
-static inline void tima_send_cmd (unsigned int p1, unsigned int cmdid)
+static inline void tima_send_cmd5 (unsigned int p1, unsigned int p2, unsigned int p3, unsigned int p4, unsigned int p5, unsigned int cmdid)
 {
-	register u32 reg0 __asm__("r0") = BUILD_CMD_ID(cmdid);
-	register u32 reg1 __asm__("r1") = p1;
-	__asm__ volatile (".arch_extension sec\n" \
-					  "smc 0" : "+r"(reg0), "+r"(reg1));
-}
-
-
-static inline void tima_send_cmd3 (unsigned int p1, unsigned int p2, unsigned int p3, unsigned int cmdid)
-{
+	volatile uint32_t tima_cmdid = BUILD_CMD_ID(cmdid); 
 	asm volatile (
 #if __GNUC__ >= 4 && __GNUC_MINOR__ >= 6
         ".arch_extension sec\n"
 #endif	
-	"stmfd   sp!, {r0-r4, r11}\n"
-        "mov     r11, r0\n"
-        "mov     r2, %0\n"
-	"mov     r3, %1\n"  
-	"mov     r4, %2\n"  
-	"mov     r0, %3\n"
-	"smc     #1\n" 
-        "ldmfd   sp!, {r0-r4, r11}" : : "r" (p1), "r" (p2), "r" (p3), "r" (cmdid) : "r0","r2","r3","r4","cc");
+		"stmfd   sp!, {r0-r5}\n"
+		"mov     r2, %0\n"
+		"mov     r3, %1\n"  
+		"mov     r4, %2\n"  
+		"mov     r5, %3\n" 
+		"mov     r1, %4\n" 
+		"mov     r0, %5\n"
+		"smc     #1\n" 
+        "ldmfd   sp!, {r0-r5}" : : "r" (p1), "r" (p2), "r" (p3), "r" (p4), "r" (p5), "r" (tima_cmdid) : "r0","r1","r2","r3","r4","r5","cc");
 }
 #endif
 

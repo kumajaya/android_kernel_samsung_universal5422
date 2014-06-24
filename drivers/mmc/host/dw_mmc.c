@@ -1444,7 +1444,8 @@ static void dw_mci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 	regs = mci_readl(slot->host, UHS_REG);
 
 	if (ios->timing == MMC_TIMING_UHS_DDR50 ||
-	    ios->timing == MMC_TIMING_MMC_HS200_DDR) {
+		ios->timing == MMC_TIMING_MMC_HS200_DDR ||
+		ios->timing == MMC_TIMING_MMC_HS200_DDR_ES) {
 		if (!mmc->tuning_progress)
 			regs |= ((SDMMC_UHS_DDR_MODE << slot->id) << 16);
 	} else
@@ -1458,7 +1459,8 @@ static void dw_mci_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 
 	mci_writel(slot->host, UHS_REG, regs);
 
-	if (ios->timing == MMC_TIMING_MMC_HS200_DDR)
+	if (ios->timing == MMC_TIMING_MMC_HS200_DDR ||
+		ios->timing == MMC_TIMING_MMC_HS200_DDR_ES)
 		if (!mmc->tuning_progress)
 			mci_writel(slot->host, CDTHRCTL, 512 << 16 | 1);
 
@@ -3795,6 +3797,9 @@ static struct dw_mci_board *dw_mci_parse_dt(struct dw_mci *host)
 
 	if (of_find_property(np, "supports-ddr200-mode", NULL))
 		pdata->caps2 |= MMC_CAP2_HS200_DDR;
+
+	if (of_find_property(np, "supports-ddr200-enhanced-strobe", NULL))
+		pdata->caps2 |= MMC_CAP2_STROBE_ENHANCED;
 
 	if (of_find_property(np, "use-broken-voltage", NULL))
 		pdata->caps2 |= MMC_CAP2_BROKEN_VOLTAGE;

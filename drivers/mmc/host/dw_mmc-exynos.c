@@ -394,6 +394,10 @@ static void dw_mci_exynos_set_ios(struct dw_mci *host, unsigned int tuning, stru
 	u32 cclkin;
 	u32 rclk_base;
 	unsigned char timing = ios->timing;
+	unsigned char timing_org = timing;
+
+	if (timing == MMC_TIMING_MMC_HS200_DDR_ES)
+		timing = MMC_TIMING_MMC_HS200_DDR;
 
 	if (timing > MMC_TIMING_MMC_HS200_DDR) {
 		pr_err("%s: timing(%d): not suppored\n", __func__, timing);
@@ -423,6 +427,8 @@ static void dw_mci_exynos_set_ios(struct dw_mci *host, unsigned int tuning, stru
 
 		if (!tuning) {
 			rddqs |= (DWMCI_RDDQS_EN | DWMCI_AXI_NON_BLOCKING_WRITE);
+			if (timing_org == MMC_TIMING_MMC_HS200_DDR_ES)
+				rddqs |= DWMCI_RESP_RCLK_MODE;
 			if (priv->delay_line)
 				dline = DWMCI_FIFO_CLK_DELAY_CTRL(0x2) |
 				DWMCI_RD_DQS_DELAY_CTRL(priv->delay_line);
@@ -445,6 +451,8 @@ static void dw_mci_exynos_set_ios(struct dw_mci *host, unsigned int tuning, stru
 	__raw_writel(clksel, host->regs + DWMCI_CLKSEL);
 	__raw_writel(rddqs, host->regs + DWMCI_DDR200_RDDQS_EN + rclk_base);
 	__raw_writel(dline, host->regs + DWMCI_DDR200_DLINE_CTRL + rclk_base);
+	if (timing == MMC_TIMING_MMC_HS200_DDR)
+		__raw_writel(0x1, host->regs + DWMCI_DDR200_ASYNC_FIFO_CTRL + rclk_base);
 }
 
 #ifndef MHZ
@@ -685,10 +693,10 @@ static void exynos_dwmci_tuning_drv_st(struct dw_mci *host)
 		DRV_STR_LV6
 	};
 
-	priv->drv_str_val++;
+ 	if (priv->drv_str_val == DRV_STR_LV1)
+		priv->drv_str_val = priv->drv_str_num;
 
-	if (priv->drv_str_val == priv->drv_str_num)
-		priv->drv_str_val = 0x0;
+	priv->drv_str_val--;
 
 	dev_info(host->dev, "Clock GPIO Drive Strength Value: 0x%x\n",
 			priv->drv_str_val);
@@ -889,7 +897,8 @@ static int dw_mci_exynos_execute_tuning(struct dw_mci *host, u32 opcode)
 	mci_writel(host, CDTHRCTL, host->cd_rd_thr << 16 | 1);
 
 	/* Restore Base Drive Strength */
-	priv->drv_str_val = priv->drv_str_base_val;
+	if (priv->drv_str_pin)
+		exynos_dwmci_restore_drv_st(host);
 
 	/*
 	 * eMMC 4.5 spec section 6.6.7.1 says the device is guaranteed to
@@ -1019,7 +1028,7 @@ static int dw_mci_exynos_execute_tuning(struct dw_mci *host, u32 opcode)
 		tuning_loop--;
 	} while (!tuned);
 
-	if (priv->drv_str_pin)
+	if (priv->drv_str_pin && (priv->drv_str_val == DRV_STR_LV1))
 		exynos_dwmci_restore_drv_st(host);
 
 	/*
