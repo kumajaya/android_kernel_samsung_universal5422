@@ -12,7 +12,7 @@
  *  GNU General Public License for more details.
  *
  */
-#include "../ssp.h"
+#include "ssp.h"
 
 /*************************************************************************/
 /* factory Sysfs                                                         */
@@ -25,8 +25,8 @@ ssize_t mcu_revision_show(struct device *dev,
 {
 	struct ssp_data *data = dev_get_drvdata(dev);
 
-	return sprintf(buf, "ST01%u,ST01%u\n", data->uCurFirmRev,
-		get_module_rev(data));
+	return sprintf(buf, "ST01%u,ST01%u\n", get_module_rev(data),
+		data->uCurFirmRev);
 }
 
 ssize_t mcu_model_name_show(struct device *dev,
@@ -253,17 +253,17 @@ ssize_t mcu_sleep_factorytest_show(struct device *dev,
 
 exit:
 	ssp_dbg("[SSP]: %s Result\n"
-		"[SSP]: accel %d,%d,%d\n"
-		"[SSP]: gyro %d,%d,%d\n"
-		"[SSP]: mag %d,%d,%d\n"
-		"[SSP]: baro %d,%d\n"
-		"[SSP]: ges %d,%d,%d,%d\n"
-		"[SSP]: prox %u,%u\n"
-		"[SSP]: temp %d,%d,%d\n"
+		"accel %d,%d,%d\n"
+		"gyro %d,%d,%d\n"
+		"mag %d,%d,%d\n"
+		"baro %d,%d\n"
+		"ges %d,%d,%d,%d\n"
+		"prox %u,%u\n"
+		"temp %d,%d,%d\n"
 #if defined(CONFIG_SENSORS_SSP_TMG399X) || defined(CONFIG_SENSORS_SSP_MAX88921)
-		"[SSP]: light %u,%u,%u,%u,%u,%u\n", __func__,
+		"light %u,%u,%u,%u,%u,%u\n", __func__,
 #else
-		"[SSP]: light %u,%u,%u,%u\n", __func__,
+		"light %u,%u,%u,%u\n", __func__,
 #endif
 		fsb[ACCELEROMETER_SENSOR].x, fsb[ACCELEROMETER_SENSOR].y,
 		fsb[ACCELEROMETER_SENSOR].z, fsb[GYROSCOPE_SENSOR].x,
@@ -278,11 +278,11 @@ exit:
 		fsb[TEMPERATURE_HUMIDITY_SENSOR].y,
 		fsb[TEMPERATURE_HUMIDITY_SENSOR].z,
 		fsb[LIGHT_SENSOR].r, fsb[LIGHT_SENSOR].g, fsb[LIGHT_SENSOR].b,
-		fsb[LIGHT_SENSOR].w
+		fsb[LIGHT_SENSOR].w,
 #if defined(CONFIG_SENSORS_SSP_TMG399X)
-		,fsb[LIGHT_SENSOR].a_time, fsb[LIGHT_SENSOR].a_gain
+		fsb[LIGHT_SENSOR].a_time, fsb[LIGHT_SENSOR].a_gain
 #elif defined(CONFIG_SENSORS_SSP_MAX88921)
-		,fsb[LIGHT_SENSOR].ir_cmp, fsb[LIGHT_SENSOR].amb_pga
+		fsb[LIGHT_SENSOR].ir_cmp, fsb[LIGHT_SENSOR].amb_pga
 #endif
 		);
 

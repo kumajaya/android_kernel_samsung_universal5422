@@ -12,10 +12,11 @@
  *  GNU General Public License for more details.
  *
  */
-#include "../ssp.h"
+#include "ssp.h"
 
-#define	VENDOR		"AMS"
-#define	CHIP_ID		"TMG399X"
+#define	VENDOR		"CAPELLA"
+#define	CHIP_ID_3320	"CM3320"
+#define	CHIP_ID		"CM3323"
 
 /*************************************************************************/
 /* factory Sysfs                                                         */
@@ -29,7 +30,7 @@ static ssize_t light_vendor_show(struct device *dev,
 static ssize_t light_name_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
-	return sprintf(buf, "%s\n", CHIP_ID);
+	return sprintf(buf, "%s\n", CHIP_ID_3320);
 }
 
 static ssize_t light_lux_show(struct device *dev,
@@ -37,10 +38,9 @@ static ssize_t light_lux_show(struct device *dev,
 {
 	struct ssp_data *data = dev_get_drvdata(dev);
 
-	return sprintf(buf, "%u,%u,%u,%u,%u,%u\n",
+	return sprintf(buf, "%u,%u,%u,%u\n",
 		data->buf[LIGHT_SENSOR].r, data->buf[LIGHT_SENSOR].g,
-		data->buf[LIGHT_SENSOR].b, data->buf[LIGHT_SENSOR].w,
-		data->buf[LIGHT_SENSOR].a_time, data->buf[LIGHT_SENSOR].a_gain);
+		data->buf[LIGHT_SENSOR].b, data->buf[LIGHT_SENSOR].w);
 }
 
 static ssize_t light_data_show(struct device *dev,
@@ -48,10 +48,9 @@ static ssize_t light_data_show(struct device *dev,
 {
 	struct ssp_data *data = dev_get_drvdata(dev);
 
-	return sprintf(buf, "%u,%u,%u,%u,%u,%u\n",
+	return sprintf(buf, "%u,%u,%u,%u\n",
 		data->buf[LIGHT_SENSOR].r, data->buf[LIGHT_SENSOR].g,
-		data->buf[LIGHT_SENSOR].b, data->buf[LIGHT_SENSOR].w,
-		data->buf[LIGHT_SENSOR].a_time, data->buf[LIGHT_SENSOR].a_gain);
+		data->buf[LIGHT_SENSOR].b, data->buf[LIGHT_SENSOR].w);
 }
 
 static DEVICE_ATTR(vendor, S_IRUGO, light_vendor_show, NULL);

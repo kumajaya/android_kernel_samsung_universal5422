@@ -12,21 +12,21 @@
  *  GNU General Public License for more details.
  *
  */
-#include "../ssp.h"
+#include "ssp.h"
 
 /*************************************************************************/
 /* factory Sysfs                                                         */
 /*************************************************************************/
 
-#define MODEL_NAME			"STM32F401CEY6B"
+#define MODEL_NAME			"AT32UC3L0128"
 
 ssize_t mcu_revision_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct ssp_data *data = dev_get_drvdata(dev);
 
-	return sprintf(buf, "ST01%u,ST01%u\n", get_module_rev(data),
-		data->uCurFirmRev);
+	return sprintf(buf, "AT01120%u,AT01120%u\n", data->uCurFirmRev,
+		get_module_rev(data));
 }
 
 ssize_t mcu_model_name_show(struct device *dev,
@@ -111,49 +111,24 @@ ssize_t mcu_reset_show(struct device *dev,
 	return sprintf(buf, "OK\n");
 }
 
-ssize_t mcu_dump_show(struct device *dev, struct device_attribute *attr,
-		char *buf) {
-	struct ssp_data *data = dev_get_drvdata(dev);
-	int status = 1, iDelaycnt = 0;
-
-	data->bDumping = true;
-	set_big_data_start(data, BIG_TYPE_DUMP, 0);
-	msleep(300);
-	while (data->bDumping) {
-		mdelay(10);
-		if (iDelaycnt++ > 1000) {
-			status = 0;
-			break;
-		}
-	}
-	return sprintf(buf, "%s\n", status ? "OK" : "NG");
-}
-
-static char buffer[FACTORY_DATA_MAX];
-
 ssize_t mcu_factorytest_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t size)
 {
 	struct ssp_data *data = dev_get_drvdata(dev);
+	char chTempBuf[2] = {0, 10};
 	int iRet = 0;
-	struct ssp_msg *msg;
 
 	if (sysfs_streq(buf, "1")) {
-		msg = kzalloc(sizeof(*msg), GFP_KERNEL);
-		if (msg == NULL) {
-			pr_err("[SSP] %s, failed to alloc memory for ssp_msg\n", __func__);
-			return -ENOMEM;
-		}
-		msg->cmd = MCU_FACTORY;
-		msg->length = 5;
-		msg->options = AP2HUB_READ;
-		msg->buffer = buffer;
-		msg->free_buffer = 0;
+		data->uFactorydataReady = 0;
+		memset(data->uFactorydata, 0, sizeof(char) * FACTORY_DATA_MAX);
 
-		memset(msg->buffer, 0, 5);
+		data->bMcuIRQTestSuccessed = false;
+		data->uTimeOutCnt = 0;
 
-		iRet = ssp_spi_async(data, msg);
-
+		iRet = send_instruction(data, FACTORY_MODE,
+				MCU_FACTORY, chTempBuf, 2);
+		if (data->uTimeOutCnt == 0)
+			data->bMcuIRQTestSuccessed = true;
 	} else {
 		pr_err("[SSP]: %s - invalid value %d\n", __func__, *buf);
 		return -EINVAL;
@@ -175,45 +150,46 @@ ssize_t mcu_factorytest_show(struct device *dev,
 		return sprintf(buf, "NG,NG,NG\n");
 	}
 
-	ssp_dbg("[SSP] MCU Factory Test Data : %u, %u, %u, %u, %u\n", buffer[0],
-			buffer[1], buffer[2], buffer[3], buffer[4]);
+	if (data->uFactorydataReady & (1 << MCU_FACTORY)) {
+		ssp_dbg("[SSP] MCU Factory Test Data : %u, %u, %u, %u, %u\n",
+			data->uFactorydata[0], data->uFactorydata[1],
+			data->uFactorydata[2], data->uFactorydata[3],
+			data->uFactorydata[4]);
 
 		/* system clock, RTC, I2C Master, I2C Slave, externel pin */
-	if ((buffer[0] == SUCCESS)
-			&& (buffer[1] == SUCCESS)
-			&& (buffer[2] == SUCCESS)
-			&& (buffer[3] == SUCCESS)
-			&& (buffer[4] == SUCCESS))
-		bMcuTestSuccessed = true;
+		if ((data->uFactorydata[0] == SUCCESS)
+			&& (data->uFactorydata[1] == SUCCESS)
+			&& (data->uFactorydata[2] == SUCCESS)
+			&& (data->uFactorydata[3] == SUCCESS)
+			&& (data->uFactorydata[4] == SUCCESS))
+			bMcuTestSuccessed = true;
+	} else {
+		pr_err("[SSP]: %s - The Sensorhub is not ready %u\n", __func__,
+			data->uFactorydataReady);
+	}
 
 	ssp_dbg("[SSP]: MCU Factory Test Result - %s, %s, %s\n", MODEL_NAME,
-		(bMcuTestSuccessed ? "OK" : "NG"), "OK");
+		(data->bMcuIRQTestSuccessed ? "OK" : "NG"),
+		(bMcuTestSuccessed ? "OK" : "NG"));
 
 	return sprintf(buf, "%s,%s,%s\n", MODEL_NAME,
-		(bMcuTestSuccessed ? "OK" : "NG"), "OK");
+		(data->bMcuIRQTestSuccessed ? "OK" : "NG"),
+		(bMcuTestSuccessed ? "OK" : "NG"));
 }
 
 ssize_t mcu_sleep_factorytest_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t size)
 {
 	struct ssp_data *data = dev_get_drvdata(dev);
+	char chTempBuf[2] = {0, 10};
 	int iRet = 0;
-	struct ssp_msg *msg;
 
 	if (sysfs_streq(buf, "1")) {
-		msg = kzalloc(sizeof(*msg), GFP_KERNEL);
-		if (msg == NULL) {
-			pr_err("[SSP] %s, failed to alloc memory for ssp_msg\n", __func__);
-			return -ENOMEM;
-		}
-		msg->cmd = MCU_SLEEP_FACTORY;
-		msg->length = FACTORY_DATA_MAX;
-		msg->options = AP2HUB_READ;
-		msg->buffer = buffer;
-		msg->free_buffer = 0;
+		data->uFactorydataReady = 0;
+		memset(data->uFactorydata, 0, sizeof(char) * FACTORY_DATA_MAX);
 
-		iRet = ssp_spi_async(data, msg);
-
+		iRet = send_instruction(data, FACTORY_MODE,
+				MCU_SLEEP_FACTORY, chTempBuf, 2);
 	} else {
 		pr_err("[SSP]: %s - invalid value %d\n", __func__, *buf);
 		return -EINVAL;
@@ -230,14 +206,14 @@ ssize_t mcu_sleep_factorytest_show(struct device *dev,
 	int iDataIdx, iSensorData = 0;
 	struct ssp_data *data = dev_get_drvdata(dev);
 	struct sensor_value fsb[SENSOR_MAX];
-	u16 chLength = 0;
 
-	memcpy(&chLength, buffer, 2);
-	memset(fsb, 0, sizeof(struct sensor_value) * SENSOR_MAX);
+	if (!(data->uFactorydataReady & (1 << MCU_SLEEP_FACTORY))) {
+		pr_err("[SSP]: %s - The Sensorhub is not ready\n", __func__);
+		goto exit;
+	}
 
-	for (iDataIdx = 2; iDataIdx < chLength + 2;) {
-		iSensorData = (int)buffer[iDataIdx++];
-
+	for (iDataIdx = 0; iDataIdx < FACTORY_DATA_MAX;) {
+		iSensorData = (int)data->uFactorydata[iDataIdx++];
 		if ((iSensorData < 0) ||
 			(iSensorData >= (SENSOR_MAX - 1))) {
 			pr_err("[SSP]: %s - Mcu data frame error %d\n",
@@ -245,68 +221,33 @@ ssize_t mcu_sleep_factorytest_show(struct device *dev,
 			goto exit;
 		}
 
-		data->get_sensor_data[iSensorData]((char *)buffer,
+		data->get_sensor_data[iSensorData]((char *)data->uFactorydata,
 			&iDataIdx, &(fsb[iSensorData]));
 	}
 
-	fsb[PRESSURE_SENSOR].pressure[0] -= data->iPressureCal;
+	convert_acc_data(&fsb[ACCELEROMETER_SENSOR].x);
+	convert_acc_data(&fsb[ACCELEROMETER_SENSOR].y);
+	convert_acc_data(&fsb[ACCELEROMETER_SENSOR].z);
 
 exit:
-	ssp_dbg("[SSP]: %s Result\n"
-		"accel %d,%d,%d\n"
-		"gyro %d,%d,%d\n"
-		"mag %d,%d,%d\n"
-		"baro %d,%d\n"
-		"ges %d,%d,%d,%d\n"
-		"prox %u,%u\n"
-		"temp %d,%d,%d\n"
-#if defined(CONFIG_SENSORS_SSP_TMG399X) || defined(CONFIG_SENSORS_SSP_MAX88921)
-		"light %u,%u,%u,%u,%u,%u\n", __func__,
-#else
-		"light %u,%u,%u,%u\n", __func__,
-#endif
+	ssp_dbg("[SSP]: %s Result - "\
+		"%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%u,%u,%u,%u,%u\n", __func__,
 		fsb[ACCELEROMETER_SENSOR].x, fsb[ACCELEROMETER_SENSOR].y,
 		fsb[ACCELEROMETER_SENSOR].z, fsb[GYROSCOPE_SENSOR].x,
 		fsb[GYROSCOPE_SENSOR].y, fsb[GYROSCOPE_SENSOR].z,
-		fsb[GEOMAGNETIC_SENSOR].cal_x, fsb[GEOMAGNETIC_SENSOR].cal_y,
-		fsb[GEOMAGNETIC_SENSOR].cal_z, fsb[PRESSURE_SENSOR].pressure[0],
-		fsb[PRESSURE_SENSOR].pressure[1],
-		fsb[GESTURE_SENSOR].data[0], fsb[GESTURE_SENSOR].data[1],
-		fsb[GESTURE_SENSOR].data[2], fsb[GESTURE_SENSOR].data[3],
-		fsb[PROXIMITY_SENSOR].prox[0], fsb[PROXIMITY_SENSOR].prox[1],
-		fsb[TEMPERATURE_HUMIDITY_SENSOR].x,
-		fsb[TEMPERATURE_HUMIDITY_SENSOR].y,
-		fsb[TEMPERATURE_HUMIDITY_SENSOR].z,
-		fsb[LIGHT_SENSOR].r, fsb[LIGHT_SENSOR].g, fsb[LIGHT_SENSOR].b,
-		fsb[LIGHT_SENSOR].w,
-#if defined(CONFIG_SENSORS_SSP_TMG399X)
-		fsb[LIGHT_SENSOR].a_time, fsb[LIGHT_SENSOR].a_gain
-#elif defined(CONFIG_SENSORS_SSP_MAX88921)
-		fsb[LIGHT_SENSOR].ir_cmp, fsb[LIGHT_SENSOR].amb_pga
-#endif
-		);
-
-	return sprintf(buf, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%u,"
-#if defined(CONFIG_SENSORS_SSP_TMG399X) || defined(CONFIG_SENSORS_SSP_MAX88921)
-		"%u,%u,%u,%u,%u,%u,%d,%d,%d,%d,%d,%d\n",
-#else
-		"%u,%u,%u,%u,%d,%d,%d,%d,%d,%d\n",
-#endif
-		fsb[ACCELEROMETER_SENSOR].x, fsb[ACCELEROMETER_SENSOR].y,
-		fsb[ACCELEROMETER_SENSOR].z, fsb[GYROSCOPE_SENSOR].x,
-		fsb[GYROSCOPE_SENSOR].y, fsb[GYROSCOPE_SENSOR].z,
-		fsb[GEOMAGNETIC_SENSOR].cal_x, fsb[GEOMAGNETIC_SENSOR].cal_y,
-		fsb[GEOMAGNETIC_SENSOR].cal_z, fsb[PRESSURE_SENSOR].pressure[0],
+		fsb[GEOMAGNETIC_SENSOR].x, fsb[GEOMAGNETIC_SENSOR].y,
+		fsb[GEOMAGNETIC_SENSOR].z, fsb[PRESSURE_SENSOR].pressure[0],
 		fsb[PRESSURE_SENSOR].pressure[1], fsb[PROXIMITY_SENSOR].prox[1],
 		fsb[LIGHT_SENSOR].r, fsb[LIGHT_SENSOR].g, fsb[LIGHT_SENSOR].b,
-		fsb[LIGHT_SENSOR].w,
-#if defined(CONFIG_SENSORS_SSP_TMG399X)
-		fsb[LIGHT_SENSOR].a_time, fsb[LIGHT_SENSOR].a_gain,
-#elif defined(CONFIG_SENSORS_SSP_MAX88921)
-		fsb[LIGHT_SENSOR].ir_cmp, fsb[LIGHT_SENSOR].amb_pga,
-#endif
-		fsb[GESTURE_SENSOR].data[0], fsb[GESTURE_SENSOR].data[1],
-		fsb[GESTURE_SENSOR].data[2], fsb[GESTURE_SENSOR].data[3],
-		fsb[TEMPERATURE_HUMIDITY_SENSOR].x,
-		fsb[TEMPERATURE_HUMIDITY_SENSOR].y);
+		fsb[LIGHT_SENSOR].w);
+
+	return sprintf(buf, "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%u,%u,%u,%u,%u\n",
+		fsb[ACCELEROMETER_SENSOR].x, fsb[ACCELEROMETER_SENSOR].y,
+		fsb[ACCELEROMETER_SENSOR].z, fsb[GYROSCOPE_SENSOR].x,
+		fsb[GYROSCOPE_SENSOR].y, fsb[GYROSCOPE_SENSOR].z,
+		fsb[GEOMAGNETIC_SENSOR].x, fsb[GEOMAGNETIC_SENSOR].y,
+		fsb[GEOMAGNETIC_SENSOR].z, fsb[PRESSURE_SENSOR].pressure[0],
+		fsb[PRESSURE_SENSOR].pressure[1], fsb[PROXIMITY_SENSOR].prox[1],
+		fsb[LIGHT_SENSOR].r, fsb[LIGHT_SENSOR].g, fsb[LIGHT_SENSOR].b,
+		fsb[LIGHT_SENSOR].w);
 }
