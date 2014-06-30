@@ -12,28 +12,16 @@
  *  GNU General Public License for more details.
  *
  */
-#include "ssp.h"
+#include "../ssp.h"
+#include "magnetic_yas532.h"
 
 /*************************************************************************/
 /* factory Sysfs                                                         */
 /*************************************************************************/
 
-#define VENDOR_AK		"AKM"
-#define CHIP_ID_AK		"AK09911C"
-#define VENDOR_YAS		"YAMAHA"
-#define CHIP_ID_YAS		"YAS532"
-
+#define VENDOR		"YAMAHA"
+#define CHIP_ID		"YAS532"
 #define MAG_HW_OFFSET_FILE_PATH	"/efs/hw_offset"
-
-#define GM_DATA_SPEC_MIN	-6500
-#define GM_DATA_SPEC_MAX	6500
-
-#define GM_SELFTEST_X_SPEC_MIN	-30
-#define GM_SELFTEST_X_SPEC_MAX	30
-#define GM_SELFTEST_Y_SPEC_MIN	-30
-#define GM_SELFTEST_Y_SPEC_MAX	30
-#define GM_SELFTEST_Z_SPEC_MIN	-400
-#define GM_SELFTEST_Z_SPEC_MAX	-50
 
 int mag_open_hwoffset(struct ssp_data *data)
 {
@@ -154,6 +142,43 @@ int set_hw_offset(struct ssp_data *data)
 	return iRet;
 }
 
+int set_static_matrix(struct ssp_data *data)
+{
+	int iRet = 0;
+	struct ssp_msg *msg;
+	s16 static_matrix[9] = YAS_STATIC_ELLIPSOID_MATRIX;
+
+	if (!(data->uSensorState & 0x04)) {
+		pr_info("[SSP]: %s - Skip this function!!!"\
+			", magnetic sensor is not connected(0x%x)\n",
+			__func__, data->uSensorState);
+		return iRet;
+	}
+
+	msg = kzalloc(sizeof(*msg), GFP_KERNEL);
+	if (msg == NULL) {
+		pr_err("[SSP] %s, failed to alloc memory for ssp_msg\n", __func__);
+		return -ENOMEM;
+	}
+	msg->cmd = MSG2SSP_AP_SET_MAGNETIC_STATIC_MATRIX;
+	msg->length = 18;
+	msg->options = AP2HUB_WRITE;
+	msg->buffer = (char*) kzalloc(18, GFP_KERNEL);
+
+	msg->free_buffer = 1;
+	memcpy(msg->buffer, static_matrix, 18);
+
+	iRet = ssp_spi_async(data, msg);
+
+	if (iRet != SUCCESS) {
+		pr_err("[SSP]: %s - i2c fail %d\n", __func__, iRet);
+		iRet = ERROR;
+	}
+	pr_info("[SSP]: %s: finished \n", __func__);
+
+	return iRet;
+}
+
 int get_hw_offset(struct ssp_data *data)
 {
 	int iRet = 0;
@@ -192,58 +217,23 @@ int get_hw_offset(struct ssp_data *data)
 	return iRet;
 }
 
-static ssize_t hw_offset_show(struct device *dev,
-	struct device_attribute *attr, char *buf)
-{
-	struct ssp_data *data = dev_get_drvdata(dev);
-
-	mag_open_hwoffset(data);
-
-	pr_info("[SSP] %s: %d %d %d\n", __func__,
-		(s8)data->magoffset.x,
-		(s8)data->magoffset.y,
-		(s8)data->magoffset.z);
-
-	return sprintf(buf, "%d %d %d\n",
-		(s8)data->magoffset.x,
-		(s8)data->magoffset.y,
-		(s8)data->magoffset.z);
-}
-
 static ssize_t magnetic_vendor_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
-	struct ssp_data *data = dev_get_drvdata(dev);
-
-	if (data->ap_rev >= 6)
-		return sprintf(buf, "%s\n", VENDOR_AK);
-	else
-		return sprintf(buf, "%s\n", VENDOR_YAS);
+	return sprintf(buf, "%s\n", VENDOR);
 }
 
 static ssize_t magnetic_name_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
-	struct ssp_data *data = dev_get_drvdata(dev);
-
-	if (data->ap_rev >= 6)
-		return sprintf(buf, "%s\n", CHIP_ID_AK);
-	else
-		return sprintf(buf, "%s\n", CHIP_ID_YAS);
+	return sprintf(buf, "%s\n", CHIP_ID);
 }
 
-static int check_data_spec(struct ssp_data *data)
+static int check_rawdata_spec(struct ssp_data *data)
 {
 	if ((data->buf[GEOMAGNETIC_RAW].x == 0) &&
 		(data->buf[GEOMAGNETIC_RAW].y == 0) &&
 		(data->buf[GEOMAGNETIC_RAW].z == 0))
-		return FAIL;
-	else if ((data->buf[GEOMAGNETIC_RAW].x > GM_DATA_SPEC_MAX)
-		|| (data->buf[GEOMAGNETIC_RAW].x < GM_DATA_SPEC_MIN)
-		|| (data->buf[GEOMAGNETIC_RAW].y > GM_DATA_SPEC_MAX)
-		|| (data->buf[GEOMAGNETIC_RAW].y < GM_DATA_SPEC_MIN)
-		|| (data->buf[GEOMAGNETIC_RAW].z > GM_DATA_SPEC_MAX)
-		|| (data->buf[GEOMAGNETIC_RAW].z < GM_DATA_SPEC_MIN))
 		return FAIL;
 	else
 		return SUCCESS;
@@ -277,7 +267,6 @@ static ssize_t raw_data_show(struct device *dev,
 		else if (data->buf[GEOMAGNETIC_RAW].z < -18000)
 			data->buf[GEOMAGNETIC_RAW].z = -18000;
 	}
-
 	return snprintf(buf, PAGE_SIZE, "%d,%d,%d\n",
 		data->buf[GEOMAGNETIC_RAW].x,
 		data->buf[GEOMAGNETIC_RAW].y,
@@ -309,7 +298,7 @@ static ssize_t raw_data_store(struct device *dev,
 
 		do {
 			msleep(20);
-			if (check_data_spec(data) == SUCCESS)
+			if (check_rawdata_spec(data) == SUCCESS)
 				break;
 		} while (--iRetries);
 
@@ -328,6 +317,23 @@ static ssize_t raw_data_store(struct device *dev,
 	}
 
 	return size;
+}
+
+static int check_data_spec(struct ssp_data *data)
+{
+	if ((data->buf[GEOMAGNETIC_SENSOR].x == 0) &&
+		(data->buf[GEOMAGNETIC_SENSOR].y == 0) &&
+		(data->buf[GEOMAGNETIC_SENSOR].z == 0))
+		return FAIL;
+	else if ((data->buf[GEOMAGNETIC_SENSOR].x > 6500) ||
+		(data->buf[GEOMAGNETIC_SENSOR].x < -6500) ||
+		(data->buf[GEOMAGNETIC_SENSOR].y > 6500) ||
+		(data->buf[GEOMAGNETIC_SENSOR].y < -6500) ||
+		(data->buf[GEOMAGNETIC_SENSOR].z > 6500) ||
+		(data->buf[GEOMAGNETIC_SENSOR].z < -6500))
+		return FAIL;
+	else
+		return SUCCESS;
 }
 
 static ssize_t adc_data_read(struct device *dev,
@@ -373,41 +379,15 @@ static ssize_t adc_data_read(struct device *dev,
 		iSensorBuf[0], iSensorBuf[1], iSensorBuf[2]);
 }
 
-static ssize_t magnetic_get_asa(struct device *dev,
+static ssize_t magnetic_get_selftest(struct device *dev,
 		struct device_attribute *attr, char *buf)
-{
-	struct ssp_data *data = dev_get_drvdata(dev);
-
-	return sprintf(buf, "%d,%d,%d\n", (s16)data->uFuseRomData[0],
-		(s16)data->uFuseRomData[1], (s16)data->uFuseRomData[2]);
-}
-
-static ssize_t magnetic_get_status(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	bool bSuccess;
-	struct ssp_data *data = dev_get_drvdata(dev);
-
-	if ((data->uFuseRomData[0] == 0) ||
-		(data->uFuseRomData[0] == 0xff) ||
-		(data->uFuseRomData[1] == 0) ||
-		(data->uFuseRomData[1] == 0xff) ||
-		(data->uFuseRomData[2] == 0) ||
-		(data->uFuseRomData[2] == 0xff))
-		bSuccess = false;
-	else
-		bSuccess = true;
-
-	return sprintf(buf, "%s,%u\n", (bSuccess ? "OK" : "NG"), bSuccess);
-}
-
-static ssize_t yas_magnetic_get_selftest(struct ssp_data *data, char *buf)
 {
 	char chTempBuf[22] = { 0,  };
 	int iRet = 0;
 	s8 id = 0, x = 0, y1 = 0, y2 = 0, dir = 0;
 	s16 sx = 0, sy = 0, ohx = 0, ohy = 0, ohz = 0;
 	s8 err[7] = {-1, };
+	struct ssp_data *data = dev_get_drvdata(dev);
 
 	struct ssp_msg *msg = kzalloc(sizeof(*msg), GFP_KERNEL);
 	if (msg == NULL) {
@@ -480,225 +460,33 @@ exit:
 			err[5], sx, sy, err[6], ohx, ohy, ohz, err[1]);
 }
 
-static ssize_t ak_magnetic_get_selftest(struct ssp_data *data, char *buf)
-{
-	bool bSelftestPassed = false;
-	char chTempBuf[22] = { 0,  };
-	s16 iSF_X = 0, iSF_Y = 0, iSF_Z = 0;
-	int /*iDelayCnt = 0,*/ iRet = 0,/* iTimeoutReties = 0,*/ iSpecOutReties = 0;
-	struct ssp_msg *msg;
-
-reties:
-	msg = kzalloc(sizeof(*msg), GFP_KERNEL);
-	if (msg == NULL) {
-		pr_err("[SSP] %s, failed to alloc memory for ssp_msg\n", __func__);
-		goto exit;
-	}
-	msg->cmd = GEOMAGNETIC_FACTORY;
-	msg->length = 22;
-	msg->options = AP2HUB_READ;
-	msg->buffer = chTempBuf;
-	msg->free_buffer = 0;
-
-	iRet = ssp_spi_sync(data, msg, 1000);
-
-	if (iRet != SUCCESS) {
-		pr_err("[SSP]: %s - Magnetic Selftest Timeout!! %d\n", __func__, iRet);
-		goto exit;
-	}
-
-	/* read 6bytes data registers */
-	iSF_X = (s16)((chTempBuf[13] << 8) + chTempBuf[14]);
-	iSF_Y = (s16)((chTempBuf[15] << 8) + chTempBuf[16]);
-	iSF_Z = (s16)((chTempBuf[17] << 8) + chTempBuf[18]);
-
-	/* Store Cntl Register value to check power down */
-	data->uMagCntlRegData = chTempBuf[21];
-
-	iSF_X = (s16)(((iSF_X * data->uFuseRomData[0]) >> 7) + iSF_X);
-	iSF_Y = (s16)(((iSF_Y * data->uFuseRomData[1]) >> 7) + iSF_Y);
-	iSF_Z = (s16)(((iSF_Z * data->uFuseRomData[2]) >> 7) + iSF_Z);
-
-	pr_info("[SSP] %s: self test x = %d, y = %d, z = %d\n",
-		__func__, iSF_X, iSF_Y, iSF_Z);
-
-	if ((iSF_X >= GM_SELFTEST_X_SPEC_MIN)
-		&& (iSF_X <= GM_SELFTEST_X_SPEC_MAX))
-		pr_info("[SSP] x passed self test, expect -30<=x<=30\n");
-	else
-		pr_info("[SSP] x failed self test, expect -30<=x<=30\n");
-	if ((iSF_Y >= GM_SELFTEST_Y_SPEC_MIN)
-		&& (iSF_Y <= GM_SELFTEST_Y_SPEC_MAX))
-		pr_info("[SSP] y passed self test, expect -30<=y<=30\n");
-	else
-		pr_info("[SSP] y failed self test, expect -30<=y<=30\n");
-	if ((iSF_Z >= GM_SELFTEST_Z_SPEC_MIN)
-		&& (iSF_Z <= GM_SELFTEST_Z_SPEC_MAX))
-		pr_info("[SSP] z passed self test, expect -400<=z<=-50\n");
-	else
-		pr_info("[SSP] z failed self test, expect -400<=z<=-50\n");
-
-	if ((iSF_X >= GM_SELFTEST_X_SPEC_MIN)
-		&& (iSF_X <= GM_SELFTEST_X_SPEC_MAX)
-		&& (iSF_Y >= GM_SELFTEST_Y_SPEC_MIN)
-		&& (iSF_Y <= GM_SELFTEST_Y_SPEC_MAX)
-		&& (iSF_Z >= GM_SELFTEST_Z_SPEC_MIN)
-		&& (iSF_Z <= GM_SELFTEST_Z_SPEC_MAX))
-		bSelftestPassed = true;
-
-	if ((bSelftestPassed == false) && (iSpecOutReties++ < 5))
-		goto reties;
-
-exit:
-	return sprintf(buf, "%u,%d,%d,%d\n",
-		bSelftestPassed, iSF_X, iSF_Y, iSF_Z);
-}
-
-
-static ssize_t magnetic_get_selftest(struct device *dev,
+static ssize_t hw_offset_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct ssp_data *data = dev_get_drvdata(dev);
 
-	if (data->ap_rev >= 6)
-		return ak_magnetic_get_selftest(data, buf);
-	else
-		return yas_magnetic_get_selftest(data, buf);
+	mag_open_hwoffset(data);
+
+	pr_info("[SSP] %s: %d %d %d\n", __func__,
+		(s8)data->magoffset.x,
+		(s8)data->magoffset.y,
+		(s8)data->magoffset.z);
+
+	return sprintf(buf, "%d %d %d\n",
+		(s8)data->magoffset.x,
+		(s8)data->magoffset.y,
+		(s8)data->magoffset.z);
 }
-
-static ssize_t magnetic_check_cntl(struct device *dev,
-		struct device_attribute *attr, char *strbuf)
-{
-	bool bSuccess = false;
-	int iRet;
-	char chTempBuf[22] = { 0,  };
-	struct ssp_data *data = dev_get_drvdata(dev);
-	struct ssp_msg *msg;
-
-	if (!data->uMagCntlRegData) {
-		bSuccess = true;
-	} else {
-		pr_info("[SSP] %s - check cntl register before selftest", __func__);
-		msg = kzalloc(sizeof(*msg), GFP_KERNEL);
-		if (msg == NULL) {
-			pr_err("[SSP] %s, failed to alloc memory for ssp_msg\n", __func__);
-			return -ENOMEM;
-		}
-		msg->cmd = GEOMAGNETIC_FACTORY;
-		msg->length = 22;
-		msg->options = AP2HUB_READ;
-		msg->buffer = chTempBuf;
-		msg->free_buffer = 0;
-
-		iRet = ssp_spi_sync(data, msg, 1000);
-
-		if (iRet != SUCCESS) {
-			pr_err("[SSP] %s - spi sync failed due to Timeout!! %d\n",
-					__func__, iRet);
-		}
-
-		data->uMagCntlRegData = chTempBuf[21];
-		bSuccess = !data->uMagCntlRegData;
-	}
-
-	pr_info("[SSP] %s - CTRL : 0x%x\n", __func__,
-				data->uMagCntlRegData);
-
-	data->uMagCntlRegData = 1;	/* reset the value */
-
-	return sprintf(strbuf, "%s,%d,%d,%d\n",
-		(bSuccess ? "OK" : "NG"), (bSuccess ? 1 : 0), 0, 0);
-}
-
-#ifdef SAVE_MAG_LOG
-static ssize_t raw_data_logging_show(struct device *dev,
-	struct device_attribute *attr, char *buf)
-{
-	struct ssp_data *data = dev_get_drvdata(dev);
-
-	if (data->bGeomagneticLogged == false) {
-		data->buf[GEOMAGNETIC_SENSOR].x = -1;
-		data->buf[GEOMAGNETIC_SENSOR].y = -1;
-		data->buf[GEOMAGNETIC_SENSOR].z = -1;
-	}
-
-	return snprintf(buf, PAGE_SIZE, "%d,%d,%d\n",
-		data->buf[GEOMAGNETIC_SENSOR].x,
-		data->buf[GEOMAGNETIC_SENSOR].y,
-		data->buf[GEOMAGNETIC_SENSOR].z);
-}
-
-static ssize_t raw_data_logging_store(struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t size)
-{
-	u8 uBuf[4] = {0, };
-	int iRet;
-	int64_t dEnable;
-	struct ssp_data *data = dev_get_drvdata(dev);
-	s32 dMsDelay = 10;
-	memcpy(&uBuf[0], &dMsDelay, 4);
-
-	iRet = kstrtoll(buf, 10, &dEnable);
-	if (iRet < 0)
-		return iRet;
-
-	if (dEnable) {
-		ssp_dbg("[SSP]: %s - add %u, New = %dns\n",
-			 __func__, 1 << GEOMAGNETIC_SENSOR, SENSOR_NS_DELAY_FASTEST);
-
-		iRet = send_instruction(data, GET_LOGGING, GEOMAGNETIC_SENSOR, uBuf, 4);
-		if (iRet == SUCCESS) {
-			pr_info("[SSP] %s - success\n", __func__);
-			data->bGeomagneticLogged = true;
-		} else {
-			pr_err("[SSP] %s - failed, %d\n", __func__, iRet);
-			data->bGeomagneticLogged = false;
-		}
-	} else {
-		iRet = send_instruction(data, REMOVE_SENSOR, GEOMAGNETIC_SENSOR, uBuf, 4);
-		if (iRet == SUCCESS) {
-			pr_info("[SSP] %s - success\n", __func__);
-			data->bGeomagneticLogged = false;
-		}
-		ssp_dbg("[SSP]: %s - remove sensor = %d\n",
-			__func__, (1 << GEOMAGNETIC_SENSOR));
-	}
-
-	return size;
-}
-#endif
 
 static DEVICE_ATTR(name, S_IRUGO, magnetic_name_show, NULL);
 static DEVICE_ATTR(vendor, S_IRUGO, magnetic_vendor_show, NULL);
 static DEVICE_ATTR(raw_data, S_IRUGO | S_IWUSR | S_IWGRP,
-		raw_data_show, raw_data_store);
+	raw_data_show, raw_data_store);
 static DEVICE_ATTR(adc, S_IRUGO, adc_data_read, NULL);
 static DEVICE_ATTR(selftest, S_IRUGO, magnetic_get_selftest, NULL);
 static DEVICE_ATTR(hw_offset, S_IRUGO, hw_offset_show, NULL);
-static DEVICE_ATTR(status, S_IRUGO,  magnetic_get_status, NULL);
-static DEVICE_ATTR(dac, S_IRUGO, magnetic_check_cntl, NULL);
-static DEVICE_ATTR(ak09911_asa, S_IRUGO, magnetic_get_asa, NULL);
-#ifdef SAVE_MAG_LOG
-static DEVICE_ATTR(logging_data, S_IRUGO | S_IWUSR | S_IWGRP,
-		raw_data_logging_show, raw_data_logging_store);
-#endif
 
 static struct device_attribute *mag_attrs[] = {
-	&dev_attr_name,
-	&dev_attr_vendor,
-	&dev_attr_adc,
-	&dev_attr_dac,
-	&dev_attr_raw_data,
-	&dev_attr_selftest,
-	&dev_attr_status,
-	&dev_attr_ak09911_asa,
-#ifdef SAVE_MAG_LOG
-	&dev_attr_logging_data,
-#endif
-	NULL,
-};
-
-static struct device_attribute *mag_attrs_yas532[] = {
 	&dev_attr_name,
 	&dev_attr_vendor,
 	&dev_attr_adc,
@@ -710,18 +498,10 @@ static struct device_attribute *mag_attrs_yas532[] = {
 
 void initialize_magnetic_factorytest(struct ssp_data *data)
 {
-	if (data->ap_rev >= 6)
-		sensors_register(data->mag_device, data,
-					mag_attrs, "magnetic_sensor");
-	else
-		sensors_register(data->mag_device, data,
-					mag_attrs_yas532, "magnetic_sensor");
+	sensors_register(data->mag_device, data, mag_attrs, "magnetic_sensor");
 }
 
 void remove_magnetic_factorytest(struct ssp_data *data)
 {
-	if (data->ap_rev >= 6)
-		sensors_unregister(data->mag_device, mag_attrs);
-	else
-		sensors_unregister(data->mag_device, mag_attrs_yas532);
+	sensors_unregister(data->mag_device, mag_attrs);
 }
